@@ -1,0 +1,12 @@
+version: "1"
+services:
+  mqtt:
+    image: eclipse-mosquitto
+    container_name: mosquitto
+    volumes:
+      - .\mosquitto\config\mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - .\mosquitto\data:/mosquitto/data
+      - .\mosquitto\log:/mosquitto/log
+    ports:
+      - 1883:1883
+      - 9001:9001  
