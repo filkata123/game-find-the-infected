@@ -1,0 +1,4 @@
+FROM python:3.10 
+ADD mqtt_pub.py .
+RUN pip install paho-mqtt
+CMD ["python3", "./mqtt_pub.py"] 

@@ -9,4 +9,12 @@ services:
       - .\mosquitto\log:/mosquitto/log
     ports:
       - 1883:1883
-      - 9001:9001  
+      - 9001:9001
+  publish:
+    build: .\docker\pub
+    depends_on:
+      - mqtt
+  subscribe:
+    build: .\docker\sub
+    depends_on:
+      - mqtt
