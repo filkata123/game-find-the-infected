@@ -10,11 +10,9 @@ services:
     ports:
       - 1883:1883
       - 9001:9001
-  publish:
-    build: .\docker\pub
+  chat:
+    build: .\docker\chat
     depends_on:
       - mqtt
-  subscribe:
-    build: .\docker\sub
-    depends_on:
-      - mqtt
+    ports:
+      - 5000:5000
