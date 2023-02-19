@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Chat App</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+      function sendMessage() {
+        var message = $('#message').val();
+        $.ajax({
+          type: 'POST',
+          url: '/chat',
+          contentType: 'application/json',
+          data: JSON.stringify({'message': message}),
+          success: function(response) {
+            console.log(response);
+          }
+        });
+        $('#message').val('');
+      }
+
+      function updateMessages() {
+        $.getJSON('/chat', function(messages) {
+          $('#messages').empty();
+          for (var i = 0; i < messages.length; i++) {
+            $('#messages').append('<p>' + messages[i] + '</p>');
+          }
+        });
+      }
+
+      $(document).ready(function() {
+        setInterval(updateMessages, 1000);
+        $('#send').click(sendMessage);
+        $('#message').keydown(function(event) {
+          if (event.keyCode == 13) {
+            sendMessage();
+          }
+        });
+      });
+    </script>
+  </head>
+  <body>
+    <div>
+      <h1>Chat App</h1>
+      <div id="messages"></div>
+      <input type="text" id="message">
+      <button id="send">Send</button>
+    </div>
+  </body>
+</html>
