@@ -2,28 +2,6 @@ import socket
 import threading
 import queue
 
-class Room(threading.Thread):
-    def __init__(self):
-        super().__init__()
-        self.clients = []
-        self.message_queue = queue.Queue()
-    
-    def run(self):
-        while True:
-            try:
-                message = self.message_queue.get(block=True, timeout=0.1)
-            except queue.Empty:
-                pass
-            else:
-                for client in self.clients:
-                    client.sendall(message)
-    
-    def add_client(self, client_socket):
-        self.clients.append(client_socket)
-    
-    def remove_client(self, client_socket):
-        self.clients.remove(client_socket)
-
 def handle_client(client_socket, rooms):
     # Find a room with an open slot or create a new room
     room = None
@@ -72,3 +50,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+#TODO Should be able to talk to kubernetes to keep track of room containers
+# Maybe make use of Khalil's code? Make them all separate, containarize and do the above
