@@ -107,7 +107,7 @@ class Message:
                 arg1 = "127.0.0.1"
                 arg2 = str(self.addr[1]+5)
                 print(f"{arg2}")
-                subprocess.Popen(f'start cmd /k python Roomserver.py {arg1} {arg2}', shell=True)      
+                subprocess.Popen(f'start cmd /k python roomserver2.py {arg1} {arg2}', shell=True)      
         else:
             content = {"result": f"Error: invalid action '{action}'."}
         content_encoding = "utf-8"

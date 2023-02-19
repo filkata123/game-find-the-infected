@@ -41,8 +41,6 @@ list_of_clients = []
 
 def clientthread(conn, addr):
 
-	# sends a message to the client whose user object is conn
-	conn.send("Welcome to this chatroom!")
 
 	while True:
 			try:
@@ -94,6 +92,8 @@ while True:
 	which contains the IP address of the client that just
 	connected"""
 	conn, addr = server.accept()
+	print(conn)
+	print(addr)
 
 	"""Maintains a list of clients for ease of broadcasting
 	a message to all available people in the chatroom"""
@@ -105,6 +105,5 @@ while True:
 	# creates and individual thread for every user
 	# that connects
 	start_new_thread(clientthread,(conn,addr))	
-
 conn.close()
 server.close()

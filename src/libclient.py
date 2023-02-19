@@ -19,8 +19,8 @@ class Message:
         self._jsonheader_len = None
         self.jsonheader = None
         self.response = None
-        self.ROOM_IP = 0
-        self.ROOM_PORT = 0
+        self.ROOM_IP = None
+        self.ROOM_PORT = None
 
     def get_ROOM_IP(self):
         return self.ROOM_IP
@@ -93,7 +93,7 @@ class Message:
         result = content.get("result")
         print(f"Got result: {result}")        
         Message = result.split(":")
-        self.ROOM_IP = int(Message[1])
+        self.ROOM_IP = Message[1]
         self.ROOM_PORT = int(Message[2])
 
     def _process_response_binary_content(self):
@@ -135,6 +135,7 @@ class Message:
         print(f"Closing connection to {self.addr}")
         try:
             self.selector.unregister(self.sock)
+            print(f"connection closed")
         except Exception as e:
             print(
                 f"Error: selector.unregister() exception for "
