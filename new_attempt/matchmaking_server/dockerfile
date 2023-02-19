@@ -1,0 +1,9 @@
+FROM python:3.10 
+
+RUN pip install flask flask-socketio
+
+COPY matchmaker.py /app/matchmaker.py
+
+WORKDIR /app
+
+CMD ["python", "matchmaker.py"]
