@@ -130,3 +130,5 @@ dmypy.json
 
 mosquitto/data
 mosquitto/log
+
+.vs/

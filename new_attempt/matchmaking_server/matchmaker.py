@@ -1,76 +1,74 @@
 import socket
+import threading
+import queue
 
-# Define the host and port number
-HOST = 'localhost'
-PORT = 8000
+class Room(threading.Thread):
+    def __init__(self):
+        super().__init__()
+        self.clients = []
+        self.message_queue = queue.Queue()
+    
+    def run(self):
+        while True:
+            try:
+                message = self.message_queue.get(block=True, timeout=0.1)
+            except queue.Empty:
+                pass
+            else:
+                for client in self.clients:
+                    client.sendall(message)
+    
+    def add_client(self, client_socket):
+        self.clients.append(client_socket)
+    
+    def remove_client(self, client_socket):
+        self.clients.remove(client_socket)
 
-# Create a socket object
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+def handle_client(client_socket, rooms):
+    # Find a room with an open slot or create a new room
+    room = None
+    for r in rooms:
+        if len(r.clients) < 5:
+            room = r
+            break
+    if room is None:
+        room = Room()
+        rooms.append(room)
+        room.start()
+    # Add client to the room
+    room.add_client(client_socket)
+    # Handle communication with client
+    while True:
+        data = client_socket.recv(1024)
+        if not data:
+            break
+        # Enqueue message to be sent to other clients in the same room
+        room.message_queue.put(data)
+    # Client has disconnected, remove from room
+    room.remove_client(client_socket)
+    # If room is empty, remove from list of active rooms
+    if len(room.clients) == 0:
+        rooms.remove(room)
+        room.join()
+    client_socket.close()
 
-# Bind the socket to a specific address and port
-server_socket.bind((HOST, PORT))
+def main():
+    # Set up socket
+    host = ''
+    port = 12345
+    backlog = 5
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((host, port))
+    server_socket.listen(backlog)
+    print('Server listening on {}:{}'.format(host, port))
+    # Main loop
+    global rooms
+    rooms = []
+    while True:
+        client_socket, client_address = server_socket.accept()
+        print('Received connection from {}'.format(client_address))
+        client_thread = threading.Thread(target=handle_client, args=(client_socket, rooms))
+        client_thread.start()
 
-# Listen for incoming connections
-server_socket.listen(4)
-
-clients = []
-chat_rooms = []
-
-conn, addr = server_socket.accept()  # accept new connection
-print(f"New client connected: {addr}")
-
-# Send welcome message to the client
-conn.sendall(b"Welcome to the chat room! Please enter your name: ")
-name = conn.recv(1024).decode().strip()  # Receive the client's name
-conn.sendall(b"Enter chat room name: ")
-room_name = conn.recv(1024).decode().strip()  # Receive the chat room name
-
-# Add the client to the list of connected clients
-clients.append(conn)
-
-# Add the client to the specified chat room
-if room_name not in chat_rooms:
-    chat_rooms.append(name)
-
-# Send a message to all clients in the chat room
-for client_name in chat_rooms:
-    if client_name != name:
-        client_conn = clients[client_name]
-        client_conn.sendall(f"{name} has joined the chat room.".encode())
-
-while True:
-    data = conn.recv(1024)  # Receive data from the client
-    if not data:
-        break
-    data = data.decode().strip()
-    if data.startswith("/join "):
-        # Handle client request to join a new chat room
-        new_room = data.split("/join ")[1]
-        if new_room not in chat_rooms:
-            chat_rooms[new_room] = []
-        chat_rooms[new_room].append(name)
-        chat_rooms[room_name].remove(name)
-        room_name = new_room
-        conn.sendall(f"You have joined the '{new_room}' chat room.".encode())
-        # Send a message to all clients in the new chat room
-        for client_name in chat_rooms[new_room]:
-            if client_name != name:
-                client_conn = clients[client_name]
-                client_conn.sendall(f"{name} has joined the chat room.".encode())
-    elif data.startswith("/leave"):
-        # Handle client request to leave the chat room
-        chat_rooms[room_name].remove(name)
-        conn.sendall("You have left the chat room.".encode())
-        # Send a message to all clients in the chat room
-        for client_name in chat_rooms[room_name]:
-            client_conn = clients[client_name]
-            client_conn.sendall(f"{name} has left the chat room.".encode())
-        break
-    else:
-        # Broadcast the message to all clients in the chat room
-        for client_name in chat_rooms[room_name]:
-            if client_name != name:
-                client_conn = clients[client_name]
-                client_conn.sendall(f"{name}: {data}".encode())
-
-# Remove the client from the list of connected clients
+if __name__ == '__main__':
+    main()

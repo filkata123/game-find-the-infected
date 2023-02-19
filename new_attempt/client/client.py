@@ -1,46 +1,30 @@
 import socket
 import threading
 
-# Define the host and port number
-HOST = 'localhost'
-PORT = 8000
+HOST = '127.0.0.1'
+PORT = 12345
 
-# Create a socket object
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-# Connect to the server
-client_socket.connect((HOST, PORT))
-
-# Define a function to receive messages from the server
-def receive_messages():
+def receive_messages(sock):
     while True:
-        data = client_socket.recv(1024)
+        data = sock.recv(1024)
         if not data:
             break
-        print(data.decode())
+        print('Received:', data.decode())
 
-# Start a new thread to receive messages from the server
-receive_thread = threading.Thread(target=receive_messages)
-receive_thread.start()
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.connect((HOST, PORT))
+    print('Connected to server')
 
-# Send the client's name and chat room name to the server
-client_socket.sendall(input("Enter your name: ").encode())
-client_socket.sendall(input("Enter chat room name: ").encode())
+    # Start a new thread to receive messages
+    thread = threading.Thread(target=receive_messages, args=(s,))
+    thread.daemon = True
+    thread.start()
 
-while True:
-    message = input()  # Read input from the user
-    if message == "/leave":
-        # Handle client request to leave the chat room
-        client_socket.sendall(message.encode())
-        break
-    elif message.startswith("/join "):
-        # Handle client request to join a new chat room
-        client_socket.sendall(message.encode())
-        response = client_socket.recv(1024).decode()
-        print(response)
-    else:
-        # Send the message to the server to be broadcast to the chat room
-        client_socket.sendall(message.encode())
+    while True:
+        message = input('Enter message: ')
+        s.sendall(message.encode())
+        if message.lower() == 'exit':
+            break
 
-# Close the socket connection
-#client_socket.close()
+    # Wait for the thread to finish
+    thread.join()
