@@ -1,77 +1,70 @@
-
 import socket
 import select
 import sys
-
+import paho.mqtt.client as mqtt
+import random
 HEADER_LENGTH = 10
+PORT_MQTT = 1883
+TIMEOUT = 60
 
- Rooms_IP = "127.0.0.1"
- Rooms_PORT = 1234
-
-# Create a socket
-# socket.AF_INET - address family, IPv4, some otehr possible are AF_INET6, AF_BLUETOOTH, AF_UNIX
-# socket.SOCK_STREAM - TCP, conection-based, socket.SOCK_DGRAM - UDP, connectionless, datagrams, socket.SOCK_RAW - raw IP packets
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-# SO_ - socket option
-# SOL_ - socket option level
-# Sets REUSEADDR (as a socket option) to 1 on socket
-server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-# Bind, so server informs operating system that it's going to use given IP and port
-# For a server using 0.0.0.0 means to listen on all available interfaces, useful to connect
-#  locally to 127.0.0.1 and remotely to LAN interface IP
-if len(sys.argv) != 3:
-	print ("Correct usage: script, IP address, port number")
+leader = True
+GameInfo = True
+Game_Full = False
+index = 0
+if len(sys.argv) != 2:
+	print ("Correct usage: IP address, port number")
 	exit()
+Rooms_IP = str(sys.argv[2])
+Rooms_PORT = int(sys.argv[2])                
+room_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+room_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+room_socket.bind((Rooms_IP, Rooms_PORT))
+room_socket.listen(4)
+messages = []
+broker = 'mqtt'
+topic_chat = "chat"+ str(Rooms_PORT)
+topic_election = "bully" + str(Rooms_PORT)
+topic_master = "master" + str(Rooms_PORT)
 
-# takes the first argument from command prompt as IP address
-IP_address = str(sys.argv[1])
-
-# takes second argument from command prompt as port number
-Port = int(sys.argv[2])
-server_socket.bind((IP_address, Port))
-
-# This makes server listen to new connections
-server_socket.listen(10)
-
-# List of sockets for select.select()
-sockets_list = [server_socket]
-
+sockets_list = [room_socket]
 # List of connected clients - socket as a key, user header and name as data
 clients = {}
-rooms = {}
-
-print(f'Listening for connections on {IP_address}:{Port}...')
-
+print(f'Listening for connections on {Rooms_IP}:{Rooms_PORT}...')
 # Handles message receiving
 def receive_message(client_socket):
-
     try:
-
         # Receive our "header" containing message length, it's size is defined and constant
         message_header = client_socket.recv(HEADER_LENGTH)
-
         # If we received no data, client gracefully closed a connection, for example using socket.close() or socket.shutdown(socket.SHUT_RDWR)
         if not len(message_header):
             return False
-
         # Convert header to int value
         message_length = int(message_header.decode('utf-8').strip())
-
         # Return an object of message header and message data
         return {'header': message_header, 'data': client_socket.recv(message_length)}
-
     except:
-
         # If we are here, client closed connection violently, for example by pressing ctrl+c on his script
         # or just lost his connection
         # socket.close() also invokes socket.shutdown(socket.SHUT_RDWR) what sends information about closing the socket (shutdown read/write)
         # and that's also a cause when we receive an empty message
         return False
+def on_connect(client, userdata, flags, rc):
+    print("Connected with result code "+str(rc))
+    client.subscribe(topic_master)
 
+def on_message(client, userdata, msg):
+    message = msg.payload.decode()
+    messages.append(message)
+def StartGame():
+    infected=random.choice(list)
+    return infected
+
+Room = mqtt.Client()
+Room.on_connect = on_connect
+Room.on_message = on_message
+Room.connect(broker, PORT_MQTT, TIMEOUT)
+Room.loop_start()
 while True:
-
     # Calls Unix select() system call or Windows select() WinSock call with three parameters:
     #   - rlist - sockets to be monitored for incoming data
     #   - wlist - sockets for data to be send to (checks if for example buffers are not full and socket is ready to send some data)
@@ -82,86 +75,65 @@ while True:
     #   - errors  - sockets with some exceptions
     # This is a blocking call, code execution will "wait" here and "get" notified in case any action should be taken
     read_sockets, _, exception_sockets = select.select(sockets_list, [], sockets_list)
-
-
     # Iterate over notified sockets
     for notified_socket in read_sockets:
-
         # If notified socket is a server socket - new connection, accept it
-        if notified_socket == server_socket:
-
+        if notified_socket == room_socket:
             # Accept new connection
             # That gives us new socket - client socket, connected to this given client only, it's unique for that client
             # The other returned object is ip/port set
-            client_socket, client_address = server_socket.accept()
-            if rooms[client_socket] == "Room " + Rooms_IP:
-                    # idk do smthg 
+            # if first client synchronize and give it leader role
+            # leader role means infor about who is infected
+            # if client fails and new leader is elected give him the same info aswell
+            client_socket, client_address = room_socket.accept()           
+            client_socket.send("Input your username:")
             # Client should send his name right away, receive it
             user = receive_message(client_socket)
-
             # If False - client disconnected before he sent his name
             if user is False:
                 continue
-
             # Add accepted socket to select.select() list
-            sockets_list.append(client_socket)
-
+            sockets_list.append(client_socket)           
             # Also save username and username header
             clients[client_socket] = user
-
+            if (leader):
+                index = sockets_list.len() - 1
+                print ("leader found"+ client_socket)
+                leader = False
+            if(sockets_list.len() == 4):
+                 Game_Full = True                 
+            else:
+                 client_socket.send("Waiting for players...")
             print('Accepted new connection from {}:{}, username: {}'.format(*client_address, user['data'].decode('utf-8')))
-
         # Else existing socket is sending a message
         else:
-
             # Receive message
             message = receive_message(notified_socket)
-            
-
             # If False, client disconnected, cleanup
             if message is False:
                 print('Closed connection from: {}'.format(clients[notified_socket]['data'].decode('utf-8')))
-
                 # Remove from list for socket.socket()
                 sockets_list.remove(notified_socket)
-
                 # Remove from our list of users
                 del clients[notified_socket]
-
                 continue
-            
-            command = message["data"].decode("utf-8")
-            user = clients[notified_socket]
-            
-            if command = "Join":
-                if full:
-                    #create room socket
-                    Rooms_IP = Rooms_IP + 1
-                    room_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    room_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    arg1 = room_socket
-                    rooms[room_socket] = "Room " + Rooms_IP
-                    subprocess.Popen(f'start cmd /k python Roomserver.py {arg1} {Rooms_IP}{Rooms_IP}', shell=True) 
             # Get user by notified socket, so we will know who sent the message
-           
-
-            print(f'Received message from {user["data"].decode("utf-8")}: {message["data"].decode("utf-8")}')
-
             # Iterate over connected clients and broadcast message
-            for client_socket in clients:
-
-                # But don't sent it to sender
-                if client_socket != notified_socket:
-
-                    # Send user and message (both with their headers)
-                    # We are reusing here message header sent by sender, and saved username header send by user when he connected
-                    client_socket.send(user['header'] + user['data'] + message['header'] + message['data'])
-
+            if(Game_Full):
+                for client_socket in clients:
+                        # Send user and message (both with their headers)
+                        # We are reusing here message header sent by sender, and saved username header send by user when he connected
+                        client_socket.send("Game starting...")
+                        if (GameInfo):                       
+                            client_socket.send(PORT_MQTT+","+broker+","+topic_chat+","+topic_election+","+topic_master)
+                            GameInfo = False
+                        else:
+                             client_socket.send(PORT_MQTT+","+broker+","+topic_chat+","+topic_election)
+                        infected = StartGame()
+                        Room.publish(topic_master, infected)
     # It's not really necessary to have this, but will handle some socket exceptions just in case
     for notified_socket in exception_sockets:
-
         # Remove from list for socket.socket()
         sockets_list.remove(notified_socket)
-
         # Remove from our list of users
         del clients[notified_socket]
