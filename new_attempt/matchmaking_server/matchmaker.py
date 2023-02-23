@@ -1,55 +1,119 @@
 import socket
 import threading
-import queue
+import subprocess
+import time
 
-def handle_client(client_socket, rooms):
-    # Find a room with an open slot or create a new room
-    room = None
-    for r in rooms:
-        if len(r.clients) < 5:
-            room = r
-            break
-    if room is None:
-        room = Room()
+HOST = 'localhost'
+PORT = 1234
+MAX_PLAYERS_PER_ROOM = 4
+EXIT_CODE = 67
+
+class Room:
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.player_count = 0
+        self.players : socket = []
+
+        self.__start()
+        
+        self.thread = threading.Thread(target=self.keep_alive)
+        self.thread.daemon = True
+        self.thread.start()
+
+        print('Room with port: ' + str(self.port) + " started!")
+
+    def get_port(self):
+        return self.port
+    
+    def get_player_count(self):
+        return self.player_count
+
+    # soft increment | possible improvement: actually check data from server process
+    def increment_player_count(self, conn):
+        if self.player_count == MAX_PLAYERS_PER_ROOM:
+            return 0
+        self.player_count = self.player_count + 1
+        self.players.append(conn)
+        return 1
+    
+    def __start(self):
+        self.proc = subprocess.Popen(['python', '../room_server/room.py', str(self.host), str(self.port)])
+
+    def keep_alive(self):
+        while True:
+            time.sleep(1)
+            for player in self.players:
+                try:
+                    player.sendall(f'ping'.encode())
+                except socket.error:
+                    player.close()
+                    self.player_count = self.player_count - 1
+
+            status = self.proc.poll()
+            if status is None:
+                # process alive
+                continue
+            elif status == EXIT_CODE:
+                #release clients
+                for player in self.players:
+                    player.close()
+                break
+            else:
+                #reconnect clients
+                print('Room with port: ' + str(self.port) + " crashed, reconnecting!")
+                self.__start()
+                for player in self.players:
+                    try:
+                        player.sendall(f'Reconnect'.encode())
+                    except socket.error:
+                        player.close()
+                        self.player_count = self.player_count - 1
+
+        # Delete itself
+        rooms.remove(self)
+        print('Room with port: ' + str(self.port) + " closed!")
+        del self
+
+# Create a list to store the list of clients in each room
+rooms : Room = []
+
+# Define a function to handle each client connection
+def handle_client(conn, addr):
+    print(f'New client connected: {addr}')
+
+    if not rooms: 
+        print('No rooms exist, creating first room...')
+        room = Room(HOST, PORT + 1)
         rooms.append(room)
-        room.start()
-    # Add client to the room
-    room.add_client(client_socket)
-    # Handle communication with client
-    while True:
-        data = client_socket.recv(1024)
-        if not data:
-            break
-        # Enqueue message to be sent to other clients in the same room
-        room.message_queue.put(data)
-    # Client has disconnected, remove from room
-    room.remove_client(client_socket)
-    # If room is empty, remove from list of active rooms
-    if len(room.clients) == 0:
-        rooms.remove(room)
-        room.join()
-    client_socket.close()
+    else:
+        room = rooms[-1]
+        if room.get_player_count() == MAX_PLAYERS_PER_ROOM:
+            print('Creating new room...')
+            room = Room(HOST, room.get_port() + 1)
+            rooms.append(room)
+        
+    # TODO: implement mutex here to ensure that multiple clients don't get assigned to the same server at the same time 
 
-def main():
-    # Set up socket
-    host = ''
-    port = 12345
-    backlog = 5
+    conn.sendall(f'You are in room {room.get_port()}'.encode()) # TODO: improve what we send - e.g. json?
+    room.increment_player_count(conn)
+    print(f'Client {addr} added to room {room.get_port()}')
+
+# Define a function to start the main server loop
+def start_server():
+    # Create a socket object
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind((host, port))
-    server_socket.listen(backlog)
-    print('Server listening on {}:{}'.format(host, port))
-    # Main loop
-    global rooms
-    rooms = []
+    server_socket.bind((HOST, PORT))
+    server_socket.listen(5)
+
+    print(f'Server started on {HOST}:{PORT}')
+
+    # Accept incoming connections
     while True:
-        client_socket, client_address = server_socket.accept()
-        print('Received connection from {}'.format(client_address))
-        client_thread = threading.Thread(target=handle_client, args=(client_socket, rooms))
-        client_thread.start()
+        ## TODO: thread for keybind listening? (ctrl + C)
+        conn, addr = server_socket.accept()
+        # Start a new thread to handle each client connection
+        handle_client(conn, addr)
 
 if __name__ == '__main__':
-    main()
-
-#TODO Should be able to talk to kubernetes to keep track of room containers
-# Maybe make use of Khalil's code? Make them all separate, containarize and do the above
+    start_server()

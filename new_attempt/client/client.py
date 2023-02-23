@@ -2,7 +2,7 @@ import socket
 import threading
 
 HOST = '127.0.0.1'
-PORT = 12345
+PORT = 1234
 
 def receive_messages(sock):
     while True:
