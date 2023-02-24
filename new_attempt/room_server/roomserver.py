@@ -11,10 +11,12 @@ leader = True
 GameInfo = True
 Game_Full = False
 index = 0
-if len(sys.argv) != 2:
-	print ("Correct usage: IP address, port number")
-	exit()
-Rooms_IP = str(sys.argv[2])
+if len(sys.argv) != 3:
+    print("Correct usage: IP address, port number")
+    print(sys.argv[1])
+    print(sys.argv[2])
+    exit()
+Rooms_IP = str(sys.argv[1])
 Rooms_PORT = int(sys.argv[2])                
 room_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 room_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
