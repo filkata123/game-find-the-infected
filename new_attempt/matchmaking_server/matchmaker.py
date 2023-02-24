@@ -2,6 +2,7 @@ import socket
 import threading
 import subprocess
 import time
+import json
 
 HOST = 'localhost'
 PORT = 1234
@@ -37,12 +38,16 @@ class Room:
         self.players.append(conn)
         return 1
     
+    # create room server process and pass host and port
     def __start(self):
         self.proc = subprocess.Popen(['python', '../room_server/room.py', str(self.host), str(self.port)])
 
+    # ensure that room is kept alive even if process crashes
     def keep_alive(self):
         while True:
             time.sleep(1)
+
+            # handle clients that are no longer reachable
             for player in self.players:
                 try:
                     player.sendall(f'ping'.encode())
@@ -50,6 +55,10 @@ class Room:
                     player.close()
                     self.player_count = self.player_count - 1
 
+            # check status of room server
+            # no status = process alive
+            # EXIT_CODE returned = game has finished properly
+            # any other status = room has crashed, so a new process will be started
             status = self.proc.poll()
             if status is None:
                 # process alive
@@ -70,7 +79,7 @@ class Room:
                         player.close()
                         self.player_count = self.player_count - 1
 
-        # Delete itself
+        # room deletes itself after game has finished
         rooms.remove(self)
         print('Room with port: ' + str(self.port) + " closed!")
         del self
@@ -95,7 +104,7 @@ def handle_client(conn, addr):
         
     # TODO: implement mutex here to ensure that multiple clients don't get assigned to the same server at the same time 
 
-    conn.sendall(f'You are in room {room.get_port()}'.encode()) # TODO: improve what we send - e.g. json?
+    conn.sendall(f'room port:{room.get_port()}'.encode()) # TODO: improve what we send - e.g. json?
     room.increment_player_count(conn)
     print(f'Client {addr} added to room {room.get_port()}')
 

@@ -2,8 +2,8 @@ import sys
 import time
 
 def main():
-    time.sleep(5)    
-    sys.exit(67)
+    time.sleep(10)    
+    sys.exit()
 
 if __name__ == '__main__':
     main()
