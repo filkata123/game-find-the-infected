@@ -40,7 +40,8 @@ class Room:
     
     # create room server process and pass host and port
     def __start(self):
-        self.proc = subprocess.Popen(['python', '../room_server/room.py', str(self.host), str(self.port)])
+        #self.proc = subprocess.Popen(['python', 'new_attempt/room_server/roomserver.py', str(self.host), str(self.port)])
+        self.proc = subprocess.Popen(f'start cmd /k python new_attempt/room_server/roomserver.py {str(self.host)} {str(self.port)}', shell=True)
 
     # ensure that room is kept alive even if process crashes
     def keep_alive(self):
@@ -70,7 +71,7 @@ class Room:
                 break
             else:
                 #reconnect clients
-                print('Room with port: ' + str(self.port) + " crashed, reconnecting!")
+                print('Room with port: ' + str(self.port) + "crashed, reconnecting!")
                 self.__start()
                 for player in self.players:
                     try:
