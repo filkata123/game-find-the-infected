@@ -40,8 +40,8 @@ class Room:
     
     # create room server process and pass host and port
     def __start(self):
-        #self.proc = subprocess.Popen(['python', 'new_attempt/room_server/roomserver.py', str(self.host), str(self.port)])
-        self.proc = subprocess.Popen(f'start cmd /k python new_attempt/room_server/roomserver.py {str(self.host)} {str(self.port)}', shell=True)
+        self.proc = subprocess.Popen(['python', '../room_server/roomserver.py', str(self.host), str(self.port)])
+        #self.proc = subprocess.Popen(f'new_attempt/room_server/roomserver.py {str(self.host)} {str(self.port)}')
 
     # ensure that room is kept alive even if process crashes
     def keep_alive(self):
@@ -71,11 +71,12 @@ class Room:
                 break
             else:
                 #reconnect clients
-                print('Room with port: ' + str(self.port) + "crashed, reconnecting!")
+                print('Room with port: ' + str(self.port) + " crashed, reconnecting!")
                 self.__start()
                 for player in self.players:
                     try:
-                        player.sendall(f'Reconnect'.encode())
+                        reconnection_object = json.dumps({"sender": "matchmaker", "command":"reconnect", "options":""})
+                        player.sendall(reconnection_object.encode())
                     except socket.error:
                         player.close()
                         self.player_count = self.player_count - 1
@@ -105,7 +106,8 @@ def handle_client(conn, addr):
         
     # TODO: implement mutex here to ensure that multiple clients don't get assigned to the same server at the same time 
 
-    conn.sendall(f'room port:{room.get_port()}'.encode()) # TODO: improve what we send - e.g. json?
+    room_connection_object = json.dumps({"sender": "matchmaker", "command":"connect", "options":room.get_port()})
+    conn.sendall(room_connection_object.encode())
     room.increment_player_count(conn)
     print(f'Client {addr} added to room {room.get_port()}')
 
