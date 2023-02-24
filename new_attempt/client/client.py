@@ -9,7 +9,9 @@ def receive_messages(sock):
         data = sock.recv(1024)
         if not data:
             break
-        print('Received:', data.decode())
+        message = data.decode()
+        if message != "ping":
+            print('Received:', data.decode())
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
@@ -23,7 +25,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     while True:
         message = input('Enter message: ')
         s.sendall(message.encode())
-        if message.lower() == 'exit':
+        if message.lower() == '/exit':
             break
 
     # Wait for the thread to finish
