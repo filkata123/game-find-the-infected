@@ -16,6 +16,7 @@ def handle_room_logic():
             if(room_connected):
                 room_socket.sendall(f"ping".encode())
         except Exception as e:
+            # TODO: ntp time?
             room_connected = False
             print(e)
 
