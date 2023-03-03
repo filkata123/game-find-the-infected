@@ -39,9 +39,9 @@ class Room:
         return 1
     
     # create room server process and pass host and port
-    def __start(self):
-        self.proc = subprocess.Popen(['python', '../room_server/roomserver.py', str(self.host), str(self.port)])
-        #self.proc = subprocess.Popen(f'new_attempt/room_server/roomserver.py {str(self.host)} {str(self.port)}')
+    def __start(self, restart_game = 0):
+        self.proc = subprocess.Popen(['python', '../room_server/room.py', str(self.host), str(self.port), str(restart_game)])
+        #self.proc = subprocess.Popen(f'new_attempt/room_server/room.py {str(self.host)} {str(self.port)}')
 
     # ensure that room is kept alive even if process crashes
     def keep_alive(self):
@@ -54,6 +54,7 @@ class Room:
                     player.sendall(f'ping'.encode())
                 except socket.error:
                     player.close()
+                    self.players.remove(player)
                     self.player_count = self.player_count - 1
 
             # check status of room server
@@ -72,13 +73,14 @@ class Room:
             else:
                 #reconnect clients
                 print('Room with port: ' + str(self.port) + " crashed, reconnecting!")
-                self.__start()
+                self.__start(1) # restart game
                 for player in self.players:
                     try:
                         reconnection_object = json.dumps({"sender": "matchmaker", "command":"reconnect", "options":""})
                         player.sendall(reconnection_object.encode())
                     except socket.error:
                         player.close()
+                        self.players.remove(player)
                         self.player_count = self.player_count - 1
 
         # room deletes itself after game has finished
