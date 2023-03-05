@@ -121,6 +121,10 @@ def main():
         while not game_full:
             setup_game(server_socket)
             print(f'Waiting for clients ... ({len(player_list)}/{MAX_PLAYERS_PER_ROOM})')
+    else:
+        # TODO: get proper roles to clients
+        # Basically redo setup game with proper roles and state (kinda)
+        leader = None
     
     room_name = "room" + str(PORT)
     print("Server " + room_name + " started.")

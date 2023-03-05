@@ -9,7 +9,8 @@ PORT = 1234
 MAX_PLAYERS_PER_ROOM = 4
 EXIT_CODE = 67
 
-#TODO: identify clients
+#TODO: identify clients with their roles somehow?
+#TODO: if server fails, put players with same roles
 
 class Room:
     def __init__(self, host, port):
