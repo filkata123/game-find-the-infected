@@ -42,7 +42,7 @@ class Room:
     
     # create room server process and pass host and port
     def __start(self, restart_game = 0):
-        self.proc = subprocess.Popen(['python', '../room_server/room.py', str(self.host), str(self.port), str(restart_game)])
+        self.proc = subprocess.Popen(['python', '../room_server/room.py', str(self.host), str(self.port), str(restart_game)]) #TODO: absolute path reference should be done here
         #self.proc = subprocess.Popen(f'new_attempt/room_server/room.py {str(self.host)} {str(self.port)}')
 
     # ensure that room is kept alive even if process crashes
@@ -78,7 +78,7 @@ class Room:
                 self.__start(1) # restart game
                 for player in self.players:
                     try:
-                        reconnection_object = json.dumps({"sender": "matchmaker", "command":"reconnect", "options":""})
+                        reconnection_object = json.dumps({"command":"reconnect", "options":""})
                         player.sendall(reconnection_object.encode())
                     except socket.error:
                         player.close()
@@ -110,7 +110,7 @@ def handle_client(conn, addr):
         
     # TODO: implement mutex here to ensure that multiple clients don't get assigned to the same server at the same time 
 
-    room_connection_object = json.dumps({"sender": "matchmaker", "command":"connect", "options":room.get_port()})
+    room_connection_object = json.dumps({"command":"connect", "options":room.get_port()})
     conn.sendall(room_connection_object.encode())
     room.increment_player_count(conn)
     print(f'Client {addr} added to room {room.get_port()}')

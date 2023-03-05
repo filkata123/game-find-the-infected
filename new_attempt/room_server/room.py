@@ -3,15 +3,22 @@ import socket
 import json
 import random
 import paho.mqtt.client as mqtt
+from dataclasses import dataclass
 
 # Global variables
 MAX_PLAYERS_PER_ROOM = 4
 EXIT_CODE = 67
 
+@dataclass
+class Player:
+    conn: socket
+    addr: tuple[str, str]
+    client_id: str
+
 game_full = False
-player_list : socket = []
-leader = None 
-infected = None
+player_list: Player = []
+leader : Player = None 
+infected : Player = None
 game_info_string = ""
 infected_found = False
 game_finished = False
@@ -22,9 +29,11 @@ broker = 'mqtt'
 topic_list = []
 
 def publish_game_info(client):
+    print("Publishing game info.")
     client.publish(topic_list[0], "The infected is " + game_info_string)
 
 def on_connect(client, userdata, flags, rc):
+    print("Subscribing to topics.")
     for topic in topic_list:
         client.subscribe(topic)
 
@@ -37,16 +46,17 @@ def on_message(client, userdata, msg):
         # TODO: What are we even sharing here?
         publish_game_info(client) 
     elif (msg.topic == topic_list[1]): #/new_leader
-        leader[0].close()
+        leader.conn.close()
         player_list.remove(leader) # TODO: is this possible?
 
         # elect new leader
         for player in player_list:
-            if message == player[1]:
+            if (message == player.client_id):
                 leader = player
+        print("New leader elected.")
     elif (msg.topic == topic_list[2]): #/proposed_infected
         # check if message is address of the infected
-        if (message == infected[1]):
+        if (infected.client_id in message): # == client_id
             infected_found = True
         else:
             # TODO: Do we kill the proposed person anyway? 
@@ -57,24 +67,28 @@ def on_message(client, userdata, msg):
 def setup_game(server_socket):
     global leader
     global infected
+    global game_full
     #listen for clients and add them up in an array
     conn, addr = server_socket.accept()
-    player_list.append((conn,addr))
+
+    room_connection_object = json.dumps({"command":"wait"})
+    conn.sendall(room_connection_object.encode())
+
+    client_id = conn.recv(1024)
+    client_id = client_id.decode()
+    player_list.append(Player(conn, addr, client_id))
 
     # choose initial leader
     if (leader is None):
         leader = player_list[0]
 
-    room_connection_object = json.dumps({"sender": "room", "command":"wait"})
-    conn.sendall(room_connection_object.encode())
-
-    if (player_list.len() == MAX_PLAYERS_PER_ROOM):
+    if (len(player_list) == MAX_PLAYERS_PER_ROOM):
         infected_number = random.randint(1, MAX_PLAYERS_PER_ROOM - 1) # random number between 1 and the amount of players without the leader
         for i, player in enumerate(player_list):
             try:
                 # send games start to all players
                 if (player is leader):
-                    player[0].sendall(json.dumps({"sender": "room", "command": "start", "option": "leader"}).encode())
+                    player.conn.sendall(json.dumps({"command": "start", "option": "leader"}).encode())
                 else:
                     # if there is no infected, assign them to the player, whose index matches with the random number selected earlier
                     if (infected is None):
@@ -82,18 +96,17 @@ def setup_game(server_socket):
                             infected = player
                     
                     if (player is infected):
-                        player[0].sendall(json.dumps({"sender": "room", "command": "start", "option": "infected"}).encode())
+                        player.conn.sendall(json.dumps({"command": "start", "option": "infected"}).encode())
                     else:
-                        player[0].sendall(json.dumps({"sender": "room", "command": "start", "option": "commoner"}).encode())
+                        player.conn.sendall(json.dumps({"command": "start", "option": "commoner"}).encode())
             except socket.error:
-                player[0].close()
+                player.conn.close()
                 # TODO: What do we do if a client exits while waiting?
-        global game_full
         game_full = True 
 
 def main():
-    if len(sys.argv) != 3:
-        print("Correct usage: room.py <ip_addr> <port_num>")
+    if len(sys.argv) != 4:
+        print("Correct usage: room.py <ip_addr> <port_num> <restarted_room>")
         exit()
 
     HOST = str(sys.argv[1])
@@ -107,8 +120,10 @@ def main():
     if (not resuming_game):
         while not game_full:
             setup_game(server_socket)
+            print(f'Waiting for clients ... ({len(player_list)}/{MAX_PLAYERS_PER_ROOM})')
     
     room_name = "room" + str(PORT)
+    print("Server " + room_name + " started.")
 
     topic_list.append(room_name + "/game")
     topic_list.append(room_name + "/new_leader")
@@ -120,12 +135,12 @@ def main():
 
     client.connect(broker, MQTT_PORT, TIMEOUT)
     client.loop_start()
+    print("Connection with MQTT broker established.")
 
     # handle publishing logic
-    global game_info_string
-    game_info_string = str(infected[1])
+    global game_info_string # TODO: Add actual game info instead of direct infected id
+    game_info_string = str(infected.client_id)
     publish_game_info(client) 
-
 
     global game_finished
     while (not game_finished):
@@ -133,8 +148,8 @@ def main():
             # inform players of game finishing and close their connection
             for player in player_list:
                 # game finished
-                player[0].sendall(json.dumps({"sender": "room", "command": "finish"}).encode())
-                player[0].close()
+                player.conn.sendall(json.dumps({"sender": "room", "command": "finish"}).encode())
+                player.conn.close()
             game_finished = True
                 
     # stop the network loop and exit the program
