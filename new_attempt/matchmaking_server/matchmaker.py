@@ -9,6 +9,8 @@ PORT = 1234
 MAX_PLAYERS_PER_ROOM = 4
 EXIT_CODE = 67
 
+#TODO: identify clients
+
 class Room:
     def __init__(self, host, port):
         self.host = host
