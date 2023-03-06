@@ -17,6 +17,7 @@ class Room:
         self.host = host
         self.port = port
         self.player_count = 0
+        self.game_started = False
         self.players : socket = []
 
         self.__start()
@@ -32,6 +33,9 @@ class Room:
     
     def get_player_count(self):
         return self.player_count
+    
+    def is_game_started(self):
+        return self.game_started
 
     # soft increment | possible improvement: actually check data from server process
     def increment_player_count(self, conn):
@@ -60,6 +64,10 @@ class Room:
                     self.players.remove(player)
                     self.player_count = self.player_count - 1
 
+            if (self.player_count == 0):
+                self.proc.terminate()
+                break
+
             # check status of room server
             # no status = process alive
             # EXIT_CODE returned = game has finished properly
@@ -71,7 +79,10 @@ class Room:
             elif status == EXIT_CODE:
                 #release clients
                 for player in self.players:
-                    player.close()
+                    try:
+                        player.sendall(json.dumps({"command": "finish", "options":""}).encode())
+                    finally:
+                        player.close()
                 break
             else:
                 #reconnect clients
@@ -104,7 +115,7 @@ def handle_client(conn, addr):
         rooms.append(room)
     else:
         room = rooms[-1]
-        if room.get_player_count() == MAX_PLAYERS_PER_ROOM:
+        if room.get_player_count() == MAX_PLAYERS_PER_ROOM or room.is_game_started(): # don't add players to started game
             print('Creating new room...')
             room = Room(HOST, room.get_port() + 1)
             rooms.append(room)
@@ -114,6 +125,8 @@ def handle_client(conn, addr):
     room_connection_object = json.dumps({"command":"connect", "options":room.get_port()})
     conn.sendall(room_connection_object.encode())
     room.increment_player_count(conn)
+    if (room.get_player_count() == MAX_PLAYERS_PER_ROOM):
+        room.game_started = True
     print(f'Client {addr} added to room {room.get_port()}')
 
 # Define a function to start the main server loop

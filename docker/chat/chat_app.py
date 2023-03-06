@@ -7,7 +7,7 @@ TIMEOUT = 60
 
 app = Flask(__name__)
 messages = []
-broker = 'mqtt'
+broker = 'localhost' # or address in Linux
 topic = "chat"
 
 @app.route('/')

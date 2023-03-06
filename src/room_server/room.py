@@ -25,7 +25,7 @@ game_finished = False
 
 MQTT_PORT = 1883
 TIMEOUT = 60
-broker = 'mqtt'
+broker = 'localhost'
 topic_list = []
 
 def publish_game_info(client):
@@ -42,12 +42,13 @@ def on_message(client, userdata, msg):
     global infected_found
     message = msg.payload.decode()
     if (msg.topic == topic_list[0]): #/game
-        # reprint game info
-        # TODO: What are we even sharing here?
-        publish_game_info(client) 
+        if (message == "help"):
+            # reprint game info
+            print("Game info requested!")
+            publish_game_info(client) 
     elif (msg.topic == topic_list[1]): #/new_leader
         leader.conn.close()
-        player_list.remove(leader) # TODO: is this possible?
+        player_list.remove(leader)
 
         # elect new leader
         for player in player_list:
@@ -123,6 +124,7 @@ def main():
             print(f'Waiting for clients ... ({len(player_list)}/{MAX_PLAYERS_PER_ROOM})')
     else:
         # TODO: get proper roles to clients
+        # listen for players to reconnect, request their client id and role
         # Basically redo setup game with proper roles and state (kinda)
         leader = None
     
@@ -137,12 +139,16 @@ def main():
     client.on_connect = on_connect
     client.on_message = on_message
 
-    client.connect(broker, MQTT_PORT, TIMEOUT)
+    try:
+        client.connect(broker, MQTT_PORT, TIMEOUT)
+    except Exception as e:
+        print("MQTT connection failed: " + str(e))
+        exit(1)
     client.loop_start()
     print("Connection with MQTT broker established.")
 
     # handle publishing logic
-    global game_info_string # TODO: Add actual game info instead of direct infected id
+    global game_info_string
     game_info_string = str(infected.client_id)
     publish_game_info(client) 
 
@@ -150,10 +156,13 @@ def main():
     while (not game_finished):
         if (infected_found):
             # inform players of game finishing and close their connection
+            print("Informing players of finished game.")
             for player in player_list:
                 # game finished
-                player.conn.sendall(json.dumps({"sender": "room", "command": "finish"}).encode())
-                player.conn.close()
+                try:
+                    player.conn.sendall(json.dumps({"command": "finish"}).encode())
+                finally:
+                    player.conn.close()
             game_finished = True
                 
     # stop the network loop and exit the program

@@ -4,7 +4,7 @@ import paho.mqtt.client as mqtt
 import time
 import datetime
 import uuid
-import sched
+import errno
 
 HOST = '127.0.0.1'
 PORT = 1234
@@ -12,10 +12,13 @@ PORT = 1234
 ROOM_PORT = 0
 
 room_socket =  socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
 room_connected = False
 game_started = False
 game_finished = False
+game_quit = False
 client_role = None
+ping_thread = None
 
 client_arrival_time = None # ntp utc time
 client_id = None
@@ -24,18 +27,21 @@ election_candidate = True
 
 MQTT_PORT = 1883
 TIMEOUT = 60
-broker = 'mqtt' # TODO: spin up own mqtt server and check what goes in
+broker = 'localhost' # specify address or 'mqtt' in Linux
 topic_list = []
 
 def election_daemon(client):
     global client_role
-    scheduler : sched.scheduler = None
+    global ping_thread 
+    global election_candidate
+    global leader_timer
+
     print("Starting election daemon.")
-    while not game_finished:
+    while not game_finished and not game_quit:
         if (client_role == "commoner"): # redundant check?
             if (time.time() - leader_timer > 5):
                 # propose myself as leader
-                client.publish(topic_list[5], client_arrival_time)
+                client.publish(topic_list[5], str(client_arrival_time))
 
                 time.sleep(5)
 
@@ -43,19 +49,25 @@ def election_daemon(client):
                 if (election_candidate):
                     client.publish(topic_list[1], client_id)
                     client_role = "leader"
-                    scheduler = sched.scheduler(time.time, time.sleep)
-                    scheduler.enter(0, 1, leader_ping)
-                    scheduler.run
+
+                    ping_thread = threading.Thread(target=leader_ping, args=(client,))
+                    ping_thread.daemon = True
+                    ping_thread.start()
                     break
 
-    # busy loop so that scheduler can be kept alive
-    while not game_finished:
-        continue
-    scheduler.shutdown()
+                # reset for future elections
+                election_candidate = True
+                leader_timer = time.time()
+    if (ping_thread):
+        ping_thread.join()  
+        print("Closed ping thread.")
+    print("election daemon finished")
             
-def leader_ping(client, scheduler):
-    client.publish(topic_list[4], "ping")
-    scheduler.enter(1, 1, leader_ping) # schedule ping in 1 sec
+def leader_ping(client):
+    while not game_finished and not game_quit:
+        client.publish(topic_list[4], "ping")
+        time.sleep(1)
+    print("leader ping finished")
 
 def on_connect(client, userdata, flags, rc):
     for topic in topic_list:
@@ -64,25 +76,26 @@ def on_connect(client, userdata, flags, rc):
 def on_message(client, userdata, msg):
     global leader_timer
     global election_candidate
+    
     message = msg.payload.decode()
+
     if (msg.topic != topic_list[3]): # if not /chat 
         if (client_role == "leader"):
             if (msg.topic == topic_list[0]): #/game
-                print("The game  whispers: " + message)
+                print("The game whispers: " + message)
         elif (client_role == "commoner"):
             if (msg.topic == topic_list[1]): #/new_leader
                 print("New leader elected.")
-                election_candidate = True
             if (msg.topic == topic_list[4]): #/alive_ping
                 leader_timer = time.time()
 
         # leader should be able to hold the crown if necessary
-        if (client_role == "leader" or client_role == "client"):
-            if (msg.topic == topic_list[5]): #/election - no infected  
-                contender_time = datetime.datetime.strptime(message, '%Y-%m-%d %H:%M:%S').replace(tzinfo=datetime.timezone.utc)
+        if (msg.topic == topic_list[5]): #/election - no infected
+            if (client_role == "leader" or client_role == "commoner"):
+                contender_time = float(message)
                 print("Am I supposed to be the new leader...")
-                if (contender_time > client_arrival_time.replace(tzinfo=datetime.timezone.utc)):
-                    # no reprecautions if client is leader as this variable is not sued anywhere in that case
+                if (contender_time > client_arrival_time):
+                    # no reprecautions if client is leader as this variable is not used anywhere in that case
                     print("No... :(")
                     election_candidate = False
     else:
@@ -105,40 +118,52 @@ def handle_room_logic():
     global client_role
     global client_id
 
-    while not game_finished:
-        if(room_connected):
-            if (not game_started):
-                # Step 1: Go through room setup
-                data = room_socket.recv(1024)
-                
-                if not data:
-                    # if room has died #TODO test whether recv is blocking properly
-                    room_connected = False
-                    continue
-                
-                message = eval('dict('+data.decode()+')')
-                if message['command'] == "wait":
-                    arrival_time_formatted = int(client_arrival_time.timestamp() * 1000)
-                    client_id = str(uuid.uuid1(node=arrival_time_formatted))
+    while not game_finished and not game_quit:
+        try:
+            if(room_connected):
+                if (not game_started):
+                    # Step 1: Go through room setup
+                    data = room_socket.recv(1024)
                     
-                    room_socket.sendall(f"{client_id}".encode())
-                    print("Waiting for players...")
-                elif message['command'] == "start":
-                    client_role = message['option']
-                    setup_mqtt_topics()
-                    game_started = True
-                    print("Game has started!")
-                    print("Your role is: " + client_role)
-            else:
-                # Step 2: listen for game finish
-                data = room_socket.recv(1024)
+                    message = eval('dict('+data.decode()+')')
+                    if ('command' in message):
+                        if message['command'] == "wait":
+                            arrival_time_formatted = int(client_arrival_time * 1000)
+                            client_id = str(uuid.uuid1(node=arrival_time_formatted))
+                            
+                            room_socket.sendall(f"{client_id}".encode())
+                            print("Waiting for players...")
+                        elif message['command'] == "start":
+                            client_role = message['option']
+                            if not topic_list: # don't resetup mqtt topics as room has same port
+                                setup_mqtt_topics()
+                            game_started = True
+                            print("Game has started!")
+                            print("Your role is: " + client_role)
+                else:
+                    # Step 2: listen for game finish
+                    data = room_socket.recv(1024)
 
-                if not data:
-                    # if room has died
-                    room_connected = False
-                    continue
-                if message['command'] == "finish":
-                    game_finished = True
+                    message = eval('dict('+data.decode()+')')
+                    if ('command' in message):
+                        if message['command'] == "finish":
+                            print("Game finished.")
+                            game_finished = True
+                    # TODO: listen for commands that will want client id and role
+        except BlockingIOError:
+            pass
+        except socket.error as e:
+            if (e.errno == errno.EWOULDBLOCK):
+                # no data available
+                pass
+            if (e.errno == errno.EBADF):
+                room_connected = False
+                print("Room disconnected.")
+                pass
+            else:
+                print("Exception: " + str(e))
+                break
+    print("handle room finished")
 
 
 def receive_messages(matchmaker_sock):
@@ -148,35 +173,48 @@ def receive_messages(matchmaker_sock):
     global ROOM_PORT
 
     print("Connected to matchmaker.")
-    try:
-        while not game_finished:
+    
+    while not game_finished and not game_quit:
+        try:
             data = matchmaker_sock.recv(1024)
-            if not data:
-                break
             message = data.decode()
             if "ping" not in message:
-                print(message)
                 message_decoded = eval('dict('+message+')')
-                if message_decoded['command'] == "connect":
-                    # connect to server
-                    ROOM_PORT = message_decoded['options']
-                    room_socket.connect((HOST, ROOM_PORT))
-                    room_connected = True
-                    client_arrival_time = datetime.datetime.utcnow()
-                    print("Connecting to room...")
-                elif message_decoded['command'] == "reconnect":
-                    # reconnect
-                    room_socket =  socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    room_socket.connect((HOST, ROOM_PORT))
-                    room_connected = True
-                    print("Reconnecting...")
-    except Exception as e:
-        print("Exception: " + str(e))
+                if ('command' in message_decoded):
+                    if message_decoded['command'] == "connect":
+                        # connect to server
+                        ROOM_PORT = message_decoded['options']
+                        room_socket.connect((HOST, ROOM_PORT))
+                        room_socket.setblocking(False)
+                        room_connected = True
+                        client_arrival_time = datetime.datetime.utcnow().timestamp()
+                        print("Connecting to room...")
+                    elif message_decoded['command'] == "reconnect":
+                        # reconnect
+                        room_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        room_socket.connect((HOST, ROOM_PORT))
+                        room_socket.setblocking(False)
+                        room_connected = True
+                        print("Reconnecting...")
+                    elif message_decoded['command'] == "finish":
+                        break
+        except socket.error as e:
+            if (e.errno == errno.EWOULDBLOCK):
+                # no data available
+                pass
+            else:
+                print("Exception: " + str(e))
+                break
+    print("receive messages finished")
 
 def main():
+    global ping_thread
     global leader_timer
+    global game_quit
+
     matchmaker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     matchmaker_socket.connect((HOST, PORT))
+    matchmaker_socket.setblocking(False)
     print('Connected to server')
 
     # Start a new thread to receive messages
@@ -198,14 +236,19 @@ def main():
     client.on_connect = on_connect
     client.on_message = on_message
 
-    client.connect(broker, MQTT_PORT, TIMEOUT)
+    try:
+        client.connect(broker, MQTT_PORT, TIMEOUT)
+    except Exception as e:
+        print("MQTT connection failed: " + str(e))
+        exit(1)
     client.loop_start()
 
     # schedule leader to ping other clients
     if (client_role == "leader"):
-        scheduler = sched.scheduler(time.time, time.sleep)
-        scheduler.enter(0, 1, leader_ping)
-        scheduler.run
+        print("I am the leader!")
+        ping_thread = threading.Thread(target=leader_ping, args=(client,))
+        ping_thread.daemon = True
+        ping_thread.start()
     elif (client_role == "commoner"):
         leader_timer = time.time()
         # election thread
@@ -213,14 +256,14 @@ def main():
         election_thread.daemon = True
         election_thread.start()
 
-    while not game_finished:
+    while not game_finished and not game_quit:
         print("[C] = chat, [I] = vote for infected, [Q] = quit")
         if (client_role == "leader"):
             print("[H] = request game info")
         client_input = input('Choose option: ')
 
         if (client_input.lower() == "q"):
-            break 
+            game_quit = True 
         elif (client_input.lower() == "c"):
             # Make sure it is known who says what
             message = str(client_id) + " says: "
@@ -234,16 +277,24 @@ def main():
         else:
             print("Please choose an existing option.")
 
+
+    # End cleanup
     if (game_finished):
         print("Game has finished!")
     client.loop_stop()
+    print("Closed mqtt loop.")
     # Wait for the thread to finish
-    thread.join()
-    thread_room.join()
     if (client_role == "commoner"):
         election_thread.join()
+        print("Closed election thread.")
     else:
-        scheduler.shutdown()
+        if (ping_thread):
+            ping_thread.join()
+            print("Closed ping thread.")
+    thread_room.join()
+    print("Closed room thread.")
+    thread.join()
+    print("Closed main thread.")
 
 if __name__ == '__main__':
     main()
