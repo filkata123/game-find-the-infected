@@ -87,7 +87,7 @@ def setup_game(server_socket):
 
     if (len(player_list) == MAX_PLAYERS_PER_ROOM):
         # TODO: What do we do if a client exits while waiting?
-        
+          
 
 
         infected_number = random.randint(1, MAX_PLAYERS_PER_ROOM - 1) # random number between 1 and the amount of players without the leader
@@ -190,11 +190,12 @@ def main():
     game_info_string = str(infected.client_id)
     publish_game_info(mqtt_client) 
 
-    game_start = time.time()
+
+    #game_start = time.time()
     global game_finished
     while (not game_finished):
-        if(time.time() - game_start > 20):
-            sys.exit()
+        # if(time.time() - game_start > 20):
+        #     sys.exit()
         if (infected_found):
             # inform players of game finishing and close their connection
             print("Informing players of finished game.")
