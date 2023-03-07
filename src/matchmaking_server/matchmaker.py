@@ -117,7 +117,8 @@ def handle_client(conn, addr):
             room = Room(HOST, room.get_port() + 1)
             rooms.append(room)
         
-    # TODO: implement mutex here to ensure that multiple clients don't get assigned to the same server at the same time 
+    # TODO: Possible improvement: implement mutex here to ensure that
+    # multiple clients don't get assigned to the same server at the same time 
 
     room_connection_object = json.dumps({"command":"connect", "options":room.get_port()})
     conn.sendall(room_connection_object.encode())
@@ -137,7 +138,7 @@ def start_server():
 
     # Accept incoming connections
     while True:
-        ## TODO: thread for keybind listening? (ctrl + C)
+        ## Can't exit from this loop. but it doesn't matter as docker will take care of that
         conn, addr = server_socket.accept()
         # Start a new thread to handle each client connection
         handle_client(conn, addr)

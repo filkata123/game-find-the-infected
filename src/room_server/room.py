@@ -49,8 +49,9 @@ def on_message(client, userdata, msg):
             print("Game info requested!")
             publish_game_info(client) 
     elif (msg.topic == topic_list[1]): #/new_leader
-        leader.conn.close()
-        player_list.remove(leader)
+        if (leader):
+            leader.conn.close()
+            player_list.remove(leader)
 
         # elect new leader
         for player in player_list:
@@ -62,6 +63,8 @@ def on_message(client, userdata, msg):
         if (infected.client_id in message): # == client_id
             infected_found = True
         else:
+            # Currently, nothing happens if the players make an incorrect guess
+            # TODO: Ideally, the incorrect guess will have repricussions
             client.publish(topic_list[2], "Try again!")
     else:
         print ("Unknown topic.")
@@ -70,6 +73,7 @@ def setup_game(server_socket):
     global leader
     global infected
     global game_full
+    global infected_found
     #listen for clients and add them up in an array
     conn, addr = server_socket.accept()
 
@@ -84,12 +88,7 @@ def setup_game(server_socket):
     if (leader is None):
         leader = player_list[0]
 
-
-    if (len(player_list) == MAX_PLAYERS_PER_ROOM):
-        # TODO: What do we do if a client exits while waiting?
-          
-
-
+    if (len(player_list) == MAX_PLAYERS_PER_ROOM):  
         infected_number = random.randint(1, MAX_PLAYERS_PER_ROOM - 1) # random number between 1 and the amount of players without the leader
         for i, player in enumerate(player_list):
             try:
@@ -107,6 +106,13 @@ def setup_game(server_socket):
                     else:
                         player.conn.sendall(json.dumps({"command": "start", "option": "commoner"}).encode())
             except socket.error:
+                # Even if a player leaves before the game has started, server will start
+                # If they are the leader, the players will do an election
+                
+                # If they are the infected, finish the game
+                if (player is infected):
+                    infected_found = True
+                # TODO: In the future, if full game functionality is desired, this will need to be fixed
                 player.conn.close()
         game_full = True 
 
@@ -114,33 +120,44 @@ def continue_game(server_socket):
     global leader
     global infected
     global game_full
+    global infected_found
 
     #listen for clients and add them up in an array
-    conn, addr = server_socket.accept()
+    try:
+        conn, addr = server_socket.accept()
 
-    # get client id
-    get_id_object = json.dumps({"command":"id"})
-    conn.sendall(get_id_object.encode())
+        # get client id
+        get_id_object = json.dumps({"command":"id"})
+        conn.sendall(get_id_object.encode())
 
-    client_id = conn.recv(1024)
-    client_id = client_id.decode()
+        client_id = conn.recv(1024)
+        client_id = client_id.decode()
 
-    player = Player(conn, addr, client_id)
-    player_list.append(player)
+        player = Player(conn, addr, client_id)
+        player_list.append(player)
 
-    # get established client role
-    get_role_object = json.dumps({"command":"role"})
-    conn.sendall(get_role_object.encode())
+        # get established client role
+        get_role_object = json.dumps({"command":"role"})
+        conn.sendall(get_role_object.encode())
 
-    client_role = conn.recv(1024)
-    client_role = client_role.decode()
-    if(client_role == "infected"):
-        infected = player
-    elif (client_role == "leader"):
-        leader = player
-    
-    if (len(player_list) == MAX_PLAYERS_PER_ROOM):
+        client_role = conn.recv(1024)
+        client_role = client_role.decode()
+        if(client_role == "infected"):
+            infected = player
+        elif (client_role == "leader"):
+            leader = player
+        
+        if (len(player_list) == MAX_PLAYERS_PER_ROOM):
+            game_full = True
+    except socket.timeout:
+        # Either somebody left the room while reconnecting, or the original room started with less than max people
         game_full = True
+
+        # if the infected player has left, the game should finish
+        if(not infected):
+            infected_found = True
+        # the same is not done for the leader, because the clients can just hold an election
+        
 
 def main():
     if len(sys.argv) != 4:
@@ -160,11 +177,14 @@ def main():
             setup_game(server_socket)
             print(f'Waiting for clients ... ({len(player_list)}/{MAX_PLAYERS_PER_ROOM})')
     else:
+        server_socket.settimeout(60)
         # listen for players to reconnect, request their client id and role
         # Basically redo setup game with proper roles and state
         while not game_full:
             continue_game(server_socket)
             print(f'Waiting for clients to reconnect ... ({len(player_list)}/{MAX_PLAYERS_PER_ROOM})')
+        
+
     
     room_name = "room" + str(PORT)
     print("Server " + room_name + " started.")
@@ -186,16 +206,16 @@ def main():
     print("Connection with MQTT broker established.")
 
     # handle publishing logic
-    global game_info_string
-    game_info_string = str(infected.client_id)
-    publish_game_info(mqtt_client) 
+    if (infected):
+        global game_info_string
+        game_info_string = str(infected.client_id)
+        publish_game_info(mqtt_client) 
 
-
-    #game_start = time.time()
+    game_start = time.time()
     global game_finished
     while (not game_finished):
-        # if(time.time() - game_start > 20):
-        #     sys.exit()
+        if(time.time() - game_start > 20):
+            sys.exit()
         if (infected_found):
             # inform players of game finishing and close their connection
             print("Informing players of finished game.")
