@@ -27,7 +27,7 @@ game_finished = False
 
 MQTT_PORT = 1883
 TIMEOUT = 60
-broker = 'localhost'
+broker = 'mqtt'
 topic_list = []
 
 def publish_game_info(mqtt_client):
@@ -169,6 +169,7 @@ def main():
     resuming_game = int(sys.argv[3])
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((HOST, PORT))
     server_socket.listen(5)
 

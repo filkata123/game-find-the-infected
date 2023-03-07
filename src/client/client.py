@@ -6,7 +6,7 @@ import datetime
 import uuid
 import errno
 
-HOST = '127.0.0.1'
+HOST = 'localhost'
 PORT = 1234
 
 ROOM_PORT = 0
@@ -163,8 +163,6 @@ def receive_messages(matchmaker_sock):
     global room_socket
     global client_arrival_time
     global ROOM_PORT
-
-    print("Connected to matchmaker.")
     
     while not game_finished and not game_quit:
         try:
@@ -212,7 +210,7 @@ def main():
     matchmaker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     matchmaker_socket.connect((HOST, PORT))
     matchmaker_socket.setblocking(False)
-    print('Connected to server')
+    print('Connected to matchmaker')
 
     # Start a new thread to receive messages
     thread = threading.Thread(target=receive_messages, args=(matchmaker_socket,))

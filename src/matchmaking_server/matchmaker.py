@@ -4,7 +4,7 @@ import subprocess
 import time
 import json
 
-HOST = 'localhost'
+HOST = '0.0.0.0'
 PORT = 1234
 MAX_PLAYERS_PER_ROOM = 4
 EXIT_CODE = 67
@@ -44,8 +44,11 @@ class Room:
     
     # create room server process and pass host and port
     def __start(self, restart_game = 0):
-        self.proc = subprocess.Popen(['python', 'src/room_server/room.py', str(self.host), str(self.port), str(restart_game)]) #TODO: absolute path reference should be done here
-        #self.proc = subprocess.Popen(f'new_attempt/room_server/room.py {str(self.host)} {str(self.port)}')
+        #self.proc = subprocess.Popen(['python', 'room.py', str(self.host), str(self.port), str(restart_game)])
+        # name = "room" + str(self.port)
+        # port_mapping = str(self.port) + ":" + str(self.port)
+        # command = ['docker', 'run','-p', port_mapping, name , 'python room.py', str(self.host), str(self.port), str(restart_game)]
+        self.proc = subprocess.Popen(['python', 'room.py', str(self.host), str(self.port), str(restart_game)])
 
     # ensure that room is kept alive even if process crashes
     def keep_alive(self):

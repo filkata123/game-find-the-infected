@@ -1,4 +1,4 @@
-version: "1"
+version: '3'
 services:
   mqtt:
     image: eclipse-mosquitto:latest
@@ -10,9 +10,10 @@ services:
     ports:
       - 1883:1883
       - 9001:9001
-  # chat:
-  #   build: .\docker\chat
-  #   depends_on:
-  #     - mqtt
-  #   ports:
-  #     - 5000:5000
+  matchmaker:
+    build: .\src\matchmaking_server
+    container_name: matchmaker
+    depends_on:
+      - mqtt
+    ports:
+      - 1234-1300:1234-1300
