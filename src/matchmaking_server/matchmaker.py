@@ -9,9 +9,6 @@ PORT = 1234
 MAX_PLAYERS_PER_ROOM = 4
 EXIT_CODE = 67
 
-#TODO: identify clients with their roles somehow?
-#TODO: if server fails, put players with same roles
-
 class Room:
     def __init__(self, host, port):
         self.host = host
@@ -47,7 +44,7 @@ class Room:
     
     # create room server process and pass host and port
     def __start(self, restart_game = 0):
-        self.proc = subprocess.Popen(['python', '../room_server/room.py', str(self.host), str(self.port), str(restart_game)]) #TODO: absolute path reference should be done here
+        self.proc = subprocess.Popen(['python', 'src/room_server/room.py', str(self.host), str(self.port), str(restart_game)]) #TODO: absolute path reference should be done here
         #self.proc = subprocess.Popen(f'new_attempt/room_server/room.py {str(self.host)} {str(self.port)}')
 
     # ensure that room is kept alive even if process crashes
@@ -90,9 +87,9 @@ class Room:
                 self.__start(1) # restart game
                 for player in self.players:
                     try:
-                        reconnection_object = json.dumps({"command":"reconnect", "options":""})
-                        player.sendall(reconnection_object.encode())
-                    except socket.error:
+                        player.sendall(json.dumps({"command":"reconnect", "options":""}).encode())
+                    except socket.error as e:
+                        print(e)
                         player.close()
                         self.players.remove(player)
                         self.player_count = self.player_count - 1

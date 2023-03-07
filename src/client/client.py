@@ -36,7 +36,6 @@ def election_daemon(client):
     global election_candidate
     global leader_timer
 
-    print("Starting election daemon.")
     while not game_finished and not game_quit:
         if (client_role == "commoner"): # redundant check?
             if (time.time() - leader_timer > 5):
@@ -141,28 +140,21 @@ def handle_room_logic():
                             print("Game has started!")
                             print("Your role is: " + client_role)
                 else:
-                    # Step 2: listen for game finish
+                    # Step 2: listen for game finish or server restart
                     data = room_socket.recv(1024)
 
                     message = eval('dict('+data.decode()+')')
                     if ('command' in message):
                         if message['command'] == "finish":
-                            print("Game finished.")
+                            print("Game has finished!")
+                            print("Press any button to exit...")
                             game_finished = True
-                    # TODO: listen for commands that will want client id and role
-        except BlockingIOError:
+                        elif message['command'] == "id":
+                            room_socket.sendall(f"{client_id}".encode())
+                        elif message['command'] == "role":
+                            room_socket.sendall(f"{client_role}".encode())
+        except:
             pass
-        except socket.error as e:
-            if (e.errno == errno.EWOULDBLOCK):
-                # no data available
-                pass
-            if (e.errno == errno.EBADF):
-                room_connected = False
-                print("Room disconnected.")
-                pass
-            else:
-                print("Exception: " + str(e))
-                break
     print("handle room finished")
 
 
@@ -178,7 +170,11 @@ def receive_messages(matchmaker_sock):
         try:
             data = matchmaker_sock.recv(1024)
             message = data.decode()
-            if "ping" not in message:
+
+            # ensure that ping isn't concatenated to a message
+            message = message.replace("ping", '')
+            if message != '': 
+                print(message)
                 message_decoded = eval('dict('+message+')')
                 if ('command' in message_decoded):
                     if message_decoded['command'] == "connect":
@@ -191,11 +187,12 @@ def receive_messages(matchmaker_sock):
                         print("Connecting to room...")
                     elif message_decoded['command'] == "reconnect":
                         # reconnect
+                        print("Reconnecting...")
+                        room_connected = False
                         room_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                         room_socket.connect((HOST, ROOM_PORT))
                         room_socket.setblocking(False)
                         room_connected = True
-                        print("Reconnecting...")
                     elif message_decoded['command'] == "finish":
                         break
         except socket.error as e:
@@ -245,7 +242,6 @@ def main():
 
     # schedule leader to ping other clients
     if (client_role == "leader"):
-        print("I am the leader!")
         ping_thread = threading.Thread(target=leader_ping, args=(client,))
         ping_thread.daemon = True
         ping_thread.start()
@@ -279,8 +275,6 @@ def main():
 
 
     # End cleanup
-    if (game_finished):
-        print("Game has finished!")
     client.loop_stop()
     print("Closed mqtt loop.")
     # Wait for the thread to finish
