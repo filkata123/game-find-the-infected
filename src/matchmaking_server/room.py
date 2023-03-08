@@ -88,6 +88,7 @@ def setup_game(server_socket):
     if (leader is None):
         leader = player_list[0]
 
+
     if (len(player_list) == MAX_PLAYERS_PER_ROOM):  
         infected_number = random.randint(1, MAX_PLAYERS_PER_ROOM - 1) # random number between 1 and the amount of players without the leader
         for i, player in enumerate(player_list):
@@ -172,6 +173,8 @@ def main():
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((HOST, PORT))
     server_socket.listen(5)
+
+    #TODO: route prints to matchmaker container to check prints
 
     if (not resuming_game):
         while not game_full:

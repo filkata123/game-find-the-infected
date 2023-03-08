@@ -188,6 +188,7 @@ def receive_messages(matchmaker_sock):
                         print("Reconnecting...")
                         room_connected = False
                         room_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        room_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                         room_socket.connect((HOST, ROOM_PORT))
                         room_socket.setblocking(False)
                         room_connected = True
