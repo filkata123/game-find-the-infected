@@ -76,7 +76,7 @@ def setup_game(server_socket):
     global infected_found
     #listen for clients and add them up in an array
     conn, addr = server_socket.accept()
-
+    
     room_connection_object = json.dumps({"command":"wait"})
     conn.sendall(room_connection_object.encode())
 
@@ -113,7 +113,7 @@ def setup_game(server_socket):
                 # If they are the infected, finish the game
                 if (player is infected):
                     infected_found = True
-                # TODO: In the future, if full game functionality is desired, this will need to be fixed
+                # TODO: In the future, if full game functionality is desired, a new infected should be elected
                 player.conn.close()
         game_full = True 
 
@@ -174,8 +174,7 @@ def main():
     server_socket.bind((HOST, PORT))
     server_socket.listen(5)
 
-    #TODO: route prints to matchmaker container to check prints
-
+    print("Room setup finished.")
     if (not resuming_game):
         while not game_full:
             setup_game(server_socket)
@@ -188,8 +187,7 @@ def main():
             continue_game(server_socket)
             print(f'Waiting for clients to reconnect ... ({len(player_list)}/{MAX_PLAYERS_PER_ROOM})')
         
-
-    
+ 
     room_name = "room" + str(PORT)
     print("Server " + room_name + " started.")
 
@@ -215,11 +213,8 @@ def main():
         game_info_string = str(infected.client_id)
         publish_game_info(mqtt_client) 
 
-    game_start = time.time()
     global game_finished
     while (not game_finished):
-        if(time.time() - game_start > 20):
-            sys.exit()
         if (infected_found):
             # inform players of game finishing and close their connection
             print("Informing players of finished game.")

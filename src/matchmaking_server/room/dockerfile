@@ -1,0 +1,17 @@
+FROM python:3.10
+
+ARG HOST=0.0.0.0
+ARG PORT=8000
+ARG RESTARTED=0
+
+RUN pip install paho-mqtt
+
+COPY room.py /app/room.py
+
+WORKDIR /app
+
+ENV HOST_E=$HOST
+ENV PORT_E=$PORT
+ENV RESTARTED_E=$RESTARTED
+
+CMD python -u room.py $HOST_E $PORT_E $RESTARTED_E

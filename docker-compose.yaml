@@ -15,5 +15,7 @@ services:
     container_name: matchmaker
     depends_on:
       - mqtt
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
-      - 1234-1300:1234-1300
+      - 1234:1234

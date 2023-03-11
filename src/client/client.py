@@ -154,6 +154,7 @@ def handle_room_logic():
                         elif message['command'] == "role":
                             room_socket.sendall(f"{client_role}".encode())
         except:
+            # TODO: handle what happens when room dies permanently? Wait some time?
             pass
     print("handle room finished")
 
@@ -209,7 +210,17 @@ def main():
     global game_quit
 
     matchmaker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    matchmaker_socket.connect((HOST, PORT))
+    connected = False
+    while not connected:
+        try:
+            # Required in the event that a new player tries to join when matchmaker is creating a room (blocking)
+            # Consideration: this could be improved if matchmaker does not block when creating a room (only possible with threads),
+            # but resource consumption must be taken into account, as a lot of threads are being used currently.
+            matchmaker_socket.connect((HOST, PORT))
+            connected = True
+        except Exception as e:
+            pass #Do nothing, just try again
+
     matchmaker_socket.setblocking(False)
     print('Connected to matchmaker')
 
