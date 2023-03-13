@@ -4,7 +4,7 @@ This repository holds the code for the "Find the infected" game made for the Dis
 
 The purpose of this game is to showcase distributed functionaliy by emulating logic from games like "Among us" and "Town of Salem". Multiple clients can connect to one matchmaking server through sockets. The matchmaker then creates a "room" server for a set number of players and informs them of the server's port and how to connect to him. Once the room is full, more rooms are spinned up. If a room crashes, a new one is created and the clients are redirected to it. The socket communication is open while the game is ongoing with the idea of informing the client about where and how they need to (re)connect and also when the game is finished. An MQTT broker is also used to allow clients to communicate between eachother and with the room. However, this communication is related to how the game itself works, instead of the server-client functionality. 
 
-The game description is the following: "Four players join a room and find out that of them has been infected by a deadly virus! The remaining three players need to figure out who the infected one is and flush him out before they are also infected. Thankfully, one of the players has gained psychic abilities and can find out who the infected is. However, he has to convince the rest that he is not lying..."
+The game description is the following: "Four players join a room and find out that one of them has been infected by a deadly virus! The remaining three players need to figure out who the infected one is and flush him out before they are also infected. Thankfully, one of the players has gained psychic abilities and can find out who the infected is. However, he has to convince the rest that he is not lying..."
 
 The players can talk with eachother through MQTT, vote for who the infected player is (so that if they are right, the game can end) and for the leader (player with ppsychic abilities) to receive information about the infected. MQTT is also used to ensure that there is always a leader. In the event that the leader quits the game, an election is started by the clients (automaticall in the background, the players do not need to do anything for this) that notice his disappearance. Then, the client who joined the room first with respect to the other clients is elected as the new leader. This is a simple implementation of the "bully algorithm", as that client with the oldest timestamp will just disregard the other clients after comparing his timestamp with theirs and will elect himself as the leader.
 
@@ -55,4 +55,9 @@ Locust is used to evaluate the load capabilities of the matchmaker. To install i
 pip install locust
 ```
 
-Then, navigate to the Evaluation folder and run
+Then, navigate to the src/Evaluation folder and run
+```
+locust -f Locust.py --host=http://localhost:1234
+```
+
+Then go to [this website](http://localhost:8089/#) where the evaluation can be ran.
