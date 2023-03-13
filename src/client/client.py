@@ -45,27 +45,29 @@ def election_daemon(mqtt_client):
 
     # Exit thread if game has finished or client has quit
     while not game_finished and not game_quit:
-        if (client_role == "commoner"): # redundant check?
+        if (client_role == "commoner"):
             if (time.time() - last_leader_ping > 5):
-                # propose myself as leader
+                # propose client as leader
                 mqtt_client.publish(mqtt_topic_list[5], str(client_arrival_time))
 
                 time.sleep(5)
 
-                # if I am still the election_candidate, elect me as leader
+                # if client is still the election_candidate, elect as leader
                 if (election_candidate):
                     mqtt_client.publish(mqtt_topic_list[1], client_id)
                     client_role = "leader"
                     print("You are the new leader!")
 
+                    # Start leader thread and exit election thread
                     leader_ping_thread = threading.Thread(target=leader_ping, args=(mqtt_client,))
                     leader_ping_thread.daemon = True
                     leader_ping_thread.start()
                     break
 
-                # reset for future elections
+                # reset for future elections if client is not chosen as leader
                 election_candidate = True
-                last_leader_ping = time.time()
+                last_leader_ping = time.time() # allow new leader to have some extra time to setup their ping thread
+    # wait until leader ping thread is done if loop has broken because of client becoming the new leader
     if (leader_ping_thread):
         leader_ping_thread.join()
 
