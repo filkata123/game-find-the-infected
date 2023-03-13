@@ -35,7 +35,7 @@ class Room:
     
     def is_game_started(self):
         return self.game_started
-
+    
     # soft increment | possible improvement: actually check data from server process
     def increment_player_count(self, conn):
         if self.player_count == MAX_PLAYERS_PER_ROOM:
@@ -43,6 +43,11 @@ class Room:
         self.player_count = self.player_count + 1
         self.players.append(conn)
         return 1
+
+    def decrement_player_count(self, player):
+        player.close()
+        self.players.remove(player)
+        self.player_count = self.player_count - 1
     
     # create room server process and pass host and port
     def __start(self, restart_game = 0):
@@ -67,15 +72,13 @@ class Room:
                         time.sleep(1)
                         player.sendall(f'ping'.encode())
                     except socket.error:
-                        player.close()
-                        self.players.remove(player)
-                        self.player_count = self.player_count - 1
+                        self.decrement_player_count(player)
                 if (self.player_count == 0):
                     print("All players left...destroying!")
                     self.proc.terminate()
                     break
             else:
-                # if game was not started in 10 seconds, kill the room
+                # if game was not started in 60 seconds, kill the room
                 if (time.time() - game_start_timer > 60):
                     print("Nobody connected to room in 60 seconds...destroying!")
                     for player in self.players:
@@ -85,8 +88,6 @@ class Room:
                             pass
                     self.proc.terminate()
                     break
-
-
             # check status of room server
             # no status = process alive
             # EXIT_CODE returned = game has finished properly
@@ -106,8 +107,11 @@ class Room:
             else:
                 #reconnect clients
                 self.game_crashed = True
-                container_delete = "docker rm {}".format(self.name)
-                subprocess.check_output(container_delete, shell=True)
+                try:
+                    container_delete = "docker rm {}".format(self.name)
+                    subprocess.check_output(container_delete, shell=True)
+                except:
+                    pass
                 print('Room with port: ' + str(self.port) + " crashed, reconnecting!")
                 # TODO: player.sendall(json.dumps({"command":"crash", "options":""}).encode())
                 self.__start(1) # restart game
@@ -121,9 +125,13 @@ class Room:
                         self.player_count = self.player_count - 1
 
         # room deletes itself after game has finished
-        # TODO: connect containers to matchmaking serv docker dynamically?
-        container_delete = "docker rm -f {}".format(self.name)
-        subprocess.check_output(container_delete, shell=True)
+        # TODO: link room containers to matchmaking container dynamically?
+        # TODO: check whether container exists before doing docker rm
+        try:
+            container_delete = "docker rm -f {}".format(self.name)
+            subprocess.check_output(container_delete, shell=True)
+        except:
+            pass
         rooms.remove(self)
         print('Room with port: ' + str(self.port) + " closed!")
         del self
@@ -149,8 +157,7 @@ def handle_client(conn, addr):
     # TODO: Possible improvement: implement mutex here to ensure that
     # multiple clients don't get assigned to the same server at the same time 
 
-    room_connection_object = json.dumps({"command":"connect", "options":room.get_port()})
-    conn.sendall(room_connection_object.encode())
+    conn.sendall(json.dumps({"command":"connect", "options":room.get_port()}).encode())
     room.increment_player_count(conn)
     if (room.get_player_count() == MAX_PLAYERS_PER_ROOM):
         room.game_started = True
