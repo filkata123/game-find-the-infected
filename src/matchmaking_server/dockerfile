@@ -1,13 +1,14 @@
 FROM python:3.10 
 
-RUN pip install paho-mqtt
-
-# Install the Docker client
+# Install the Docker client necessary to spin up room clients
 RUN apt-get update && apt-get install -y docker.io
 
+# Copy matchmaker and room apps together with dockerfile for rooom
 COPY matchmaker.py /app/matchmaker.py
 COPY room/room.py /app/room.py
 COPY room/dockerfile /app/dockerfile
 
 WORKDIR /app
+
+# Execute matchmaker
 CMD ["python", "-u", "matchmaker.py"]

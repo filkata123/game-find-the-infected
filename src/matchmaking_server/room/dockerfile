@@ -1,17 +1,21 @@
 FROM python:3.10
 
+# Create default arguments for room creation
 ARG HOST=0.0.0.0
 ARG PORT=8000
 ARG RESTARTED=0
 
+# Install paho-mqtt required for mqtt 
 RUN pip install paho-mqtt
 
+# Copy room and change workdirectory of docker container
 COPY room.py /app/room.py
-
 WORKDIR /app
 
+# Change the default arguments to the ones passed at build time
 ENV HOST_E=$HOST
 ENV PORT_E=$PORT
 ENV RESTARTED_E=$RESTARTED
 
+# Execute room
 CMD python -u room.py $HOST_E $PORT_E $RESTARTED_E
