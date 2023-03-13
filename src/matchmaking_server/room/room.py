@@ -27,7 +27,7 @@ game_finished = False
 
 MQTT_PORT = 1883
 TIMEOUT = 60
-broker = 'localhost'
+broker = 'mqtt'
 topic_list = []
 
 def publish_game_info(mqtt_client):
@@ -76,7 +76,7 @@ def setup_game(server_socket):
     global infected_found
     #listen for clients and add them up in an array
     conn, addr = server_socket.accept()
-
+    
     room_connection_object = json.dumps({"command":"wait"})
     conn.sendall(room_connection_object.encode())
 
@@ -87,6 +87,7 @@ def setup_game(server_socket):
     # choose initial leader
     if (leader is None):
         leader = player_list[0]
+
 
     if (len(player_list) == MAX_PLAYERS_PER_ROOM):  
         infected_number = random.randint(1, MAX_PLAYERS_PER_ROOM - 1) # random number between 1 and the amount of players without the leader
@@ -112,7 +113,7 @@ def setup_game(server_socket):
                 # If they are the infected, finish the game
                 if (player is infected):
                     infected_found = True
-                # TODO: In the future, if full game functionality is desired, this will need to be fixed
+                # TODO: In the future, if full game functionality is desired, a new infected should be elected
                 player.conn.close()
         game_full = True 
 
@@ -169,9 +170,11 @@ def main():
     resuming_game = int(sys.argv[3])
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((HOST, PORT))
     server_socket.listen(5)
 
+    print("Room setup finished.")
     if (not resuming_game):
         while not game_full:
             setup_game(server_socket)
@@ -184,8 +187,7 @@ def main():
             continue_game(server_socket)
             print(f'Waiting for clients to reconnect ... ({len(player_list)}/{MAX_PLAYERS_PER_ROOM})')
         
-
-    
+ 
     room_name = "room" + str(PORT)
     print("Server " + room_name + " started.")
 
@@ -211,11 +213,8 @@ def main():
         game_info_string = str(infected.client_id)
         publish_game_info(mqtt_client) 
 
-    game_start = time.time()
     global game_finished
     while (not game_finished):
-        if(time.time() - game_start > 20):
-            sys.exit()
         if (infected_found):
             # inform players of game finishing and close their connection
             print("Informing players of finished game.")

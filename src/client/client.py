@@ -6,7 +6,7 @@ import datetime
 import uuid
 import errno
 
-HOST = '127.0.0.1'
+HOST = 'localhost'
 PORT = 1234
 
 ROOM_PORT = 0
@@ -154,6 +154,7 @@ def handle_room_logic():
                         elif message['command'] == "role":
                             room_socket.sendall(f"{client_role}".encode())
         except:
+            # TODO: handle what happens when room dies permanently? Wait some time?
             pass
     print("handle room finished")
 
@@ -163,8 +164,6 @@ def receive_messages(matchmaker_sock):
     global room_socket
     global client_arrival_time
     global ROOM_PORT
-
-    print("Connected to matchmaker.")
     
     while not game_finished and not game_quit:
         try:
@@ -190,6 +189,7 @@ def receive_messages(matchmaker_sock):
                         print("Reconnecting...")
                         room_connected = False
                         room_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        room_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                         room_socket.connect((HOST, ROOM_PORT))
                         room_socket.setblocking(False)
                         room_connected = True
@@ -210,9 +210,19 @@ def main():
     global game_quit
 
     matchmaker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    matchmaker_socket.connect((HOST, PORT))
+    connected = False
+    while not connected:
+        try:
+            # Required in the event that a new player tries to join when matchmaker is creating a room (blocking)
+            # Consideration: this could be improved if matchmaker does not block when creating a room (only possible with threads),
+            # but resource consumption must be taken into account, as a lot of threads are being used currently.
+            matchmaker_socket.connect((HOST, PORT))
+            connected = True
+        except Exception as e:
+            pass #Do nothing, just try again
+
     matchmaker_socket.setblocking(False)
-    print('Connected to server')
+    print('Connected to matchmaker')
 
     # Start a new thread to receive messages
     thread = threading.Thread(target=receive_messages, args=(matchmaker_socket,))

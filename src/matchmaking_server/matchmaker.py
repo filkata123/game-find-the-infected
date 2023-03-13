@@ -4,7 +4,7 @@ import subprocess
 import time
 import json
 
-HOST = 'localhost'
+HOST = '0.0.0.0'
 PORT = 1234
 MAX_PLAYERS_PER_ROOM = 4
 EXIT_CODE = 67
@@ -15,7 +15,9 @@ class Room:
         self.port = port
         self.player_count = 0
         self.game_started = False
+        self.proc = None
         self.players : socket = []
+        self.name = "room" + str(self.port)
 
         self.__start()
         
@@ -44,26 +46,46 @@ class Room:
     
     # create room server process and pass host and port
     def __start(self, restart_game = 0):
-        self.proc = subprocess.Popen(['python', 'src/room_server/room.py', str(self.host), str(self.port), str(restart_game)]) #TODO: absolute path reference should be done here
-        #self.proc = subprocess.Popen(f'new_attempt/room_server/room.py {str(self.host)} {str(self.port)}')
+        port_mapping = str(self.port) + ":" + str(self.port)
+        cmd = "docker build -t room --build-arg HOST={} --build-arg PORT={} --build-arg RESTARTED={} . && docker run -p {} --name {} --network game-find-the-infected_default room".format(str(self.host), str(self.port), str(restart_game), port_mapping, self.name)
+        self.proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+
+        # Blocks
+        while True:
+            output = self.proc.stdout.readline()
+            if (b'Room setup finished.' in output):
+                break
 
     # ensure that room is kept alive even if process crashes
     def keep_alive(self):
+        game_start_timer = time.time()
         while True:
-            time.sleep(1)
-
             # handle clients that are no longer reachable
-            for player in self.players:
-                try:
-                    player.sendall(f'ping'.encode())
-                except socket.error:
-                    player.close()
-                    self.players.remove(player)
-                    self.player_count = self.player_count - 1
+            if (self.game_started):
+                for player in self.players:
+                    try:
+                        time.sleep(1)
+                        player.sendall(f'ping'.encode())
+                    except socket.error:
+                        player.close()
+                        self.players.remove(player)
+                        self.player_count = self.player_count - 1
+                if (self.player_count == 0):
+                    print("All players left...destroying!")
+                    self.proc.terminate()
+                    break
+            else:
+                # if game was not started in 10 seconds, kill the room
+                if (time.time() - game_start_timer > 60):
+                    print("Nobody connected to room in 60 seconds...destroying!")
+                    for player in self.players:
+                        try:
+                            player.close()
+                        except socket.error:
+                            pass
+                    self.proc.terminate()
+                    break
 
-            if (self.player_count == 0):
-                self.proc.terminate()
-                break
 
             # check status of room server
             # no status = process alive
@@ -83,7 +105,11 @@ class Room:
                 break
             else:
                 #reconnect clients
+                self.game_crashed = True
+                container_delete = "docker rm {}".format(self.name)
+                subprocess.check_output(container_delete, shell=True)
                 print('Room with port: ' + str(self.port) + " crashed, reconnecting!")
+                # TODO: player.sendall(json.dumps({"command":"crash", "options":""}).encode())
                 self.__start(1) # restart game
                 for player in self.players:
                     try:
@@ -95,6 +121,9 @@ class Room:
                         self.player_count = self.player_count - 1
 
         # room deletes itself after game has finished
+        # TODO: connect containers to matchmaking serv docker dynamically?
+        container_delete = "docker rm -f {}".format(self.name)
+        subprocess.check_output(container_delete, shell=True)
         rooms.remove(self)
         print('Room with port: ' + str(self.port) + " closed!")
         del self
