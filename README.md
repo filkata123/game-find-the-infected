@@ -48,3 +48,11 @@ To stop docker:
 ```
 docker compose down
 ```
+
+## Further evaluation
+Locust is used to evaluate the load capabilities of the matchmaker. To install it, do
+```
+pip install locust
+```
+
+Then, navigate to the Evaluation folder and run
